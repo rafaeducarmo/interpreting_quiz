@@ -1,0 +1,60 @@
+# Publica la app en GitHub Pages en cada push a main.
+# Pasos: instalar Flutter -> analizar y probar -> compilar la web -> desplegar.
+
+name: Deploy a GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Permite lanzarlo a mano desde la pestaña Actions.
+  workflow_dispatch:
+
+# Permisos mínimos que necesita el despliegue en Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Si llegan dos pushes seguidos, solo se despliega el último.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Misma versión de Flutter que en la laptop (3.50.0, canal stable).
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Si el análisis o los tests fallan, no se publica nada.
+      - run: flutter analyze
+      - run: flutter test
+
+      # --base-href: la app vive en https://<usuario>.github.io/interpreting_quiz/
+      # (con subcarpeta), así que los archivos deben buscarse en /interpreting_quiz/.
+      - run: flutter build web --release --base-href /interpreting_quiz/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
